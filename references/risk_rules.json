@@ -1,0 +1,496 @@
+{
+  "version": "1.2",
+  "updated": "2026-10-20",
+  "author": "c-drive-cleanup-ultimate",
+  "note": "清理目标风险登记表。每条规则 = itemid + categoryid + 定制警告 + 延迟确认（delaybtn），结构本身明文可审查、可被用户 --rules 覆盖。匹配方式：Windows 路径小写化后做 glob（* 可跨目录分隔符）。规则自上而下匹配，第一条命中即返回，故 RED 必须排在前面。 | v1.1: 补 project-data/chat-client 规则；条件规则加 scope=file；`dir\\*` 语义支持匹配目录自身（实测 WinSxS 曾被漏判） | v1.2: 微信 4.x 程序缓存(xplugin/radium/log)纳入 GREEN",
+  "defaults": {
+    "amber_delay_seconds": 8,
+    "high_risk_delay_seconds": 15,
+    "max_batch": 10
+  },
+  "levels": {
+    "RED": "红线：永不列入清理项，只给建议。block=true",
+    "AMBER": "谨慎：必须逐项确认，且确认前强制等待 delay_seconds 秒",
+    "GREEN": "安全：纯缓存/可自动重建，可批量（仍走 delete_safe 白名单护栏）"
+  },
+  "rules": [
+    {
+      "id": "R0001",
+      "category": "personal",
+      "level": "RED",
+      "block": true,
+      "patterns": [
+        "*\\desktop\\*",
+        "*\\desktop",
+        "*\\桌面\\*",
+        "*\\桌面",
+        "*\\documents\\*",
+        "*\\documents",
+        "*\\文档\\*",
+        "*\\文档",
+        "*\\downloads\\*",
+        "*\\downloads",
+        "*\\下载\\*",
+        "*\\下载",
+        "*\\pictures\\*",
+        "*\\pictures",
+        "*\\图片\\*",
+        "*\\图片",
+        "*\\videos\\*",
+        "*\\videos",
+        "*\\视频\\*",
+        "*\\music\\*",
+        "*\\music",
+        "*\\音乐\\*",
+        "*\\onedrive\\*",
+        "*\\dropbox\\*",
+        "*\\坚果云\\*",
+        "*\\wechat files\\*\\filestorage\\file\\*"
+      ],
+      "warning": "这是个人目录。删除会丢用户自己的文件，且无法通过任何工具重建。",
+      "advice": "只读扫描；如需清理，请用户自己逐条挑选（本技能不代劳）。"
+    },
+    {
+      "id": "R0002",
+      "category": "credential",
+      "level": "RED",
+      "block": true,
+      "patterns": [
+        "*\\.ssh\\*",
+        "*\\.gnupg\\*",
+        "*\\login data",
+        "*\\login data-journal",
+        "*\\cookies",
+        "*\\cookies-journal",
+        "*\\key4.db",
+        "*\\logins.json",
+        "*\\key3.db",
+        "*\\signons.sqlite",
+        "*\\wallet.dat",
+        "*\\microsoft\\credentials\\*",
+        "*\\microsoft\\protect\\*",
+        "*\\google\\chrome\\user data\\*\\web data",
+        "*\\microsoft\\edge\\user data\\*\\web data"
+      ],
+      "warning": "这里存的是密码/令牌/证书私钥。删除后账号可能永久无法找回（部分无法重置）。",
+      "advice": "绝不清理。只提示用户自行管理密码库。"
+    },
+    {
+      "id": "R0003",
+      "category": "system-core",
+      "level": "RED",
+      "block": true,
+      "patterns": [
+        "c:\\windows\\system32\\*",
+        "c:\\windows\\syswow64\\*",
+        "c:\\windows\\winsxs\\*",
+        "c:\\windows\\servicing\\*",
+        "c:\\windows\\boot\\*",
+        "c:\\windows\\fonts\\*",
+        "c:\\program files\\*",
+        "c:\\program files (x86)\\*",
+        "c:\\system volume information\\*",
+        "c:\\$windows.~bt\\*",
+        "c:\\$windows.~ws\\*",
+        "c:\\windows\\system32\\config\\*",
+        "c:\\windows\\system32\\drivers\\*"
+      ],
+      "warning": "系统本体或已安装程序。删除会导致系统无法启动或软件损坏，且无法用清理工具恢复。",
+      "advice": "系统更新残留只走 DISM / StartComponentCleanup；不直接删文件。"
+    },
+    {
+      "id": "R0004",
+      "category": "pagefile",
+      "level": "RED",
+      "block": true,
+      "patterns": [
+        "c:\\pagefile.sys",
+        "c:\\hiberfil.sys",
+        "c:\\swapfile.sys",
+        "*\\memory.dmp",
+        "*\\pagefile.sys",
+        "*\\hiberfil.sys"
+      ],
+      "warning": "分页/休眠/转储文件。删不掉（被内核占用），强删会导致蓝屏或无法休眠。",
+      "advice": "只能「挪」或「关」：powercfg /h off；虚拟内存改到其他盘。"
+    },
+    {
+      "id": "R0005",
+      "category": "message-db",
+      "level": "RED",
+      "block": true,
+      "patterns": [
+        "*\\wechat files\\*\\msg\\*",
+        "*\\wechat files\\*\\msg\\*.db",
+        "*\\xwechat_files\\*\\db_storage\\*",
+        "*\\msg3.0.db",
+        "*\\msg3.0index.db",
+        "*\\wechat\\msg\\*",
+        "*\\wechat\\msg*.db",
+        "*\\msg\\msg.db",
+        "*\\tencent files\\*\\msg*.db",
+        "*\\tencent files\\*\\*.db",
+        "*\\wechat files\\*\\*.db",
+        "*\\appdata\\roaming\\tencent\\xwechat\\*\\db_storage\\*",
+        "*\\xwechat_files\\*\\db_storage",
+        "*\\xwechat\\*\\message\\*",
+        "*\\appdata\\roaming\\tencent\\xwechat\\db_storage\\*",
+        "*\\db_storage\\*message*.db"
+      ],
+      "warning": "聊天记录主库（加密）。删了就没了，没有云端可恢复，联系人会丢历史。",
+      "advice": "永不删。只清 Cache/FileStorage 下的缩略图与临时文件，且先备份。"
+    },
+    {
+      "id": "R0006",
+      "category": "mail",
+      "level": "RED",
+      "block": true,
+      "patterns": [
+        "*.pst",
+        "*.ost",
+        "*.eml",
+        "*.msg",
+        "*.mbox",
+        "*\\outlook\\*",
+        "*\\thunderbird\\*\\profiles\\*",
+        "*\\foxmail\\storage\\*"
+      ],
+      "warning": "本地邮件库。删除后历史邮件（含附件）永久丢失，服务器通常不同步。",
+      "advice": "只读扫描；迁移请在邮件客户端内导出。"
+    },
+    {
+      "id": "R0007",
+      "category": "source-code",
+      "level": "RED",
+      "block": true,
+      "patterns": [
+        "*\\.git\\*",
+        "*\\.svn\\*",
+        "*\\.hg\\*",
+        "*\\node_modules\\*",
+        "*\\venv\\*",
+        "*\\.venv\\*"
+      ],
+      "warning": "代码仓库或依赖目录。`.git` 删掉会丢全部提交历史；node_modules/venv 删掉要重装。",
+      "advice": "只提示体积；清理必须由开发者自己在项目内操作（git gc / 重装依赖）。"
+    },
+    {
+      "id": "R0008",
+      "category": "encrypted-container",
+      "level": "RED",
+      "block": true,
+      "patterns": [
+        "*.vhdx",
+        "*.vhd",
+        "*.vmdk",
+        "*.qcow2",
+        "*.vdi",
+        "*.bitlocker",
+        "*.tc",
+        "*.veracrypt",
+        "*.dmgex"
+      ],
+      "warning": "虚拟磁盘/加密容器。删除等于整块磁盘或加密卷消失，数据不可恢复。",
+      "advice": "只能迁移（wsl --manage --move / Docker 改 Disk location）或 compact，不能删。"
+    },
+    {
+      "id": "R0010",
+      "category": "recycle-bin",
+      "level": "AMBER",
+      "high_risk": true,
+      "delay_seconds": 15,
+      "patterns": [
+        "*\\$recycle.bin\\*",
+        "*\\recycler\\*"
+      ],
+      "warning": "回收站里有你之前删过的文件。清空后误删恢复的最后一道保险就没了。",
+      "advice": "先跑 restore_from_recycle.py --list 让用户看一眼里面有没有有用的东西。"
+    },
+    {
+      "id": "R0011",
+      "category": "browser-profile",
+      "level": "AMBER",
+      "high_risk": true,
+      "delay_seconds": 15,
+      "patterns": [
+        "*\\user data\\*\\history*",
+        "*\\user data\\*\\bookmarks*",
+        "*\\user data\\*\\extensions\\*",
+        "*\\user data\\*\\local storage\\*",
+        "*\\user data\\*\\session storage\\*",
+        "*\\user data\\*\\indexeddb\\*",
+        "*\\user data\\*\\preferences",
+        "*\\user data\\*\\favicons*",
+        "*\\user data\\*\\top sites*"
+      ],
+      "warning": "浏览器登录态/书签/扩展/站点数据。删了两个后果：所有网站退出登录，扩展配置丢失。",
+      "advice": "只清 Cache / Code Cache / GPUCache / ShaderCache；这些不做。"
+    },
+    {
+      "id": "R0012",
+      "category": "app-data",
+      "level": "AMBER",
+      "delay_seconds": 8,
+      "patterns": [
+        "*\\appdata\\roaming\\*",
+        "*\\appdata\\local\\*"
+      ],
+      "warning": "应用配置与用户数据。删了软件会重置（要重新登录、重新配置），个别会丢本地数据。",
+      "advice": "先 locate_app_caches.py 判断是缓存还是数据；缓存可删，数据只迁移。"
+    },
+    {
+      "id": "R0013",
+      "category": "dev-cache",
+      "level": "AMBER",
+      "delay_seconds": 8,
+      "patterns": [
+        "*\\pip\\cache\\*",
+        "*\\npm-cache\\*",
+        "*\\yarn\\cache\\*",
+        "*\\.gradle\\caches\\*",
+        "*\\.m2\\repository\\*",
+        "*\\.cargo\\registry\\*",
+        "*\\.nuget\\packages\\*",
+        "*\\conda\\pkgs\\*",
+        "*\\huggingface\\*",
+        "*\\.cache\\huggingface\\*",
+        "*\\go\\pkg\\mod\\*",
+        "*\\playwright\\*",
+        "*\\ms-playwright\\*",
+        "*\\.docker\\*"
+      ],
+      "warning": "开发依赖缓存。删掉能释放空间，但下次构建/训练要重新下载（可能几十 GB、耗时很长）。",
+      "advice": "报出体积让用户决定；优先用原生命令（npm cache clean --force / pip cache purge）。"
+    },
+    {
+      "id": "R0014",
+      "category": "wechat-file",
+      "level": "AMBER",
+      "high_risk": true,
+      "delay_seconds": 15,
+      "patterns": [
+        "*\\wechat files\\*\\filestorage\\*",
+        "*\\wechat files\\*\\msgattach\\*",
+        "*\\xwechat_files\\*\\msg\\attach\\*",
+        "*\\wechat files\\*\\backupfiles\\*"
+      ],
+      "warning": "微信接收/发送的图片、视频、文件本体。删了聊天记录里点开就是空白，且手机端不一定还有。",
+      "advice": "走 wechat_module 四步流水线：盘点→备份真子集→md5 去重→App 内清缓存。"
+    },
+    {
+      "id": "R0015",
+      "category": "game",
+      "level": "AMBER",
+      "delay_seconds": 8,
+      "patterns": [
+        "*\\steamapps\\*",
+        "*\\riot games\\*",
+        "*\\battle.net\\*",
+        "*\\epic games\\*",
+        "*\\tencent games\\*",
+        "*\\游戏\\*",
+        "*\\saved games\\*",
+        "*\\documents\\my games\\*"
+      ],
+      "warning": "游戏本体或存档。删本体要重下几十 GB；删存档进度直接清零。",
+      "advice": "只报体积；缓存目录（如 shadercache）可清，存档绝不碰。"
+    },
+    {
+      "id": "R0016",
+      "category": "driver-store",
+      "level": "AMBER",
+      "high_risk": true,
+      "delay_seconds": 15,
+      "patterns": [
+        "c:\\windows\\system32\\driverstore\\*",
+        "*\\driverstore\\filerepository\\*"
+      ],
+      "warning": "驱动仓库。删错会导致设备（显卡/网卡/打印机）无法识别，甚至进不了桌面。",
+      "advice": "只走 pnputil /enum-drivers + /delete-driver，且逐个确认 OEM 包。"
+    },
+    {
+      "id": "R0017",
+      "category": "windows-old",
+      "level": "AMBER",
+      "high_risk": true,
+      "delay_seconds": 15,
+      "patterns": [
+        "c:\\windows.old\\*",
+        "c:\\windows.old"
+      ],
+      "warning": "上一版 Windows 的完整备份。删了就不能「回退到上一个版本」了。",
+      "advice": "确认用户不再需要回退再删；或走 磁盘清理→以前的 Windows 安装。"
+    },
+    {
+      "id": "R0018",
+      "category": "vss",
+      "level": "AMBER",
+      "high_risk": true,
+      "delay_seconds": 15,
+      "patterns": [
+        "*\\system volume information\\*"
+      ],
+      "warning": "系统还原点/卷影副本。删了系统出问题时无法还原到之前状态。",
+      "advice": "先 vssadmin list shadowstorage 看真实占用，别按「感觉很大」去删。"
+    },
+    {
+      "id": "R0019",
+      "category": "event-log",
+      "level": "AMBER",
+      "delay_seconds": 8,
+      "patterns": [
+        "c:\\windows\\system32\\winevt\\logs\\*",
+        "*.evtx",
+        "*.etl"
+      ],
+      "warning": "系统事件日志。删了排障时没有线索（蓝屏、驱动崩溃的原因都在里面）。",
+      "advice": "只报体积；建议用「事件查看器→清除日志」并先另存。"
+    },
+    {
+      "id": "R0020",
+      "category": "prefetch",
+      "level": "AMBER",
+      "delay_seconds": 5,
+      "patterns": [
+        "c:\\windows\\prefetch\\*"
+      ],
+      "warning": "程序预读文件。删了不会坏，但接下来几天开机会变慢（系统要重新学习）。",
+      "advice": "收益通常只有几百 MB，不建议为它牺牲启动速度。"
+    },
+    {
+      "id": "R0021",
+      "category": "large-file",
+      "level": "AMBER",
+      "delay_seconds": 8,
+      "patterns": [],
+      "match_size_mb": 100,
+      "warning": "单文件超过 100MB。体积大不等于垃圾，可能是镜像/备份/工程文件。",
+      "advice": "用 scan_tiers.py 分档列出，让用户按「1GB / 500MB / 100MB」三档逐个判断。",
+      "scope": "file"
+    },
+    {
+      "id": "R0022",
+      "category": "backup-file",
+      "level": "AMBER",
+      "delay_seconds": 8,
+      "patterns": [
+        "*.bak",
+        "*.old",
+        "*.orig",
+        "*.~*",
+        "*\\backup\\*",
+        "*\\备份\\*"
+      ],
+      "warning": "备份副本。/备份/ 目录里可能是用户唯一的副本；.bak 可能是回滚用的最后一版。",
+      "advice": "逐项确认，不要因为扩展名像垃圾就批量删。"
+    },
+    {
+      "id": "R0030",
+      "category": "pure-cache",
+      "level": "GREEN",
+      "delay_seconds": 0,
+      "patterns": [
+        "c:\\windows\\temp\\*",
+        "c:\\windows\\temp",
+        "c:\\windows\\panther\\*",
+        "c:\\windows\\logs\\*",
+        "c:\\windows\\softwaredistribution\\download\\*",
+        "c:\\windows\\softwaredistribution\\download",
+        "c:\\windows\\system32\\codecache\\*",
+        "c:\\programdata\\microsoft\\windows\\wer\\*",
+        "*\\appdata\\local\\temp\\*",
+        "*\\appdata\\local\\temp",
+        "*\\appdata\\local\\pip\\cache\\*",
+        "*\\appdata\\local\\npm-cache\\*",
+        "*\\appdata\\local\\crashdumps\\*",
+        "*\\nvidia\\dxcache\\*",
+        "*\\nvidia\\glcache\\*",
+        "*\\d3dscache\\*",
+        "*\\microsoft\\edge\\user data\\*\\cache\\*",
+        "*\\microsoft\\edge\\user data\\*\\code cache\\*",
+        "*\\microsoft\\edge\\user data\\*\\gpucache\\*",
+        "*\\microsoft\\edge\\user data\\*\\shadercache\\*",
+        "*\\google\\chrome\\user data\\*\\cache\\*",
+        "*\\google\\chrome\\user data\\*\\code cache\\*",
+        "*\\google\\chrome\\user data\\*\\gpucache\\*",
+        "*\\google\\chrome\\user data\\*\\shadercache\\*",
+        "*\\thumbcache_*.db",
+        "*\\iconcache_*.db",
+        "*\\thumbs.db",
+        "*\\appdata\\roaming\\tencent\\xwechat\\xplugin\\*",
+        "*\\appdata\\roaming\\tencent\\xwechat\\radium\\*",
+        "*\\appdata\\roaming\\tencent\\xwechat\\log\\*",
+        "*\\appdata\\roaming\\tencent\\xwechat\\crashinfo\\*",
+        "*\\appdata\\roaming\\tencent\\xwechat\\update\\*",
+        "*\\appdata\\roaming\\tencent\\xwechat\\xplayer\\*"
+      ],
+      "warning": "纯缓存：删掉会被系统/应用自动重建，唯一代价是下次启动稍慢。",
+      "advice": "可批量，但仍走 delete_safe.py 白名单护栏；≤10 个/批。 微信 4.x 程序数据里的 xplugin/radium/log 等属纯缓存，删除前先退出微信（文件被占用会删不掉）。"
+    },
+    {
+      "id": "R0031",
+      "category": "temp-junk",
+      "level": "GREEN",
+      "delay_seconds": 0,
+      "patterns": [
+        "*.tmp",
+        "*.dmp",
+        "*.log"
+      ],
+      "match_age_days": 7,
+      "warning": "临时/日志/转储文件（且超过 7 天未修改）。",
+      "advice": "可批量，但必须排除 QQPCMgr 等杀软保护目录，且受白名单目录约束。",
+      "scope": "file"
+    },
+    {
+      "id": "R0009",
+      "category": "project-data",
+      "level": "RED",
+      "block": true,
+      "scope": "any",
+      "patterns": [
+        "*\\.workbuddy",
+        "*\\.workbuddy\\*",
+        "*\\.claude\\*",
+        "*\\.cursor\\*",
+        "*\\.vscode\\*",
+        "*\\.git",
+        "*\\.git\\*",
+        "*\\.ssh",
+        "*\\.ssh\\*",
+        "*\\.gnupg",
+        "*\\.gnupg\\*"
+      ],
+      "warning": "项目/工具链数据目录：含记忆库、技能包、密钥配置、Git 历史。这些是**工作成果**，删了无法通过重装软件恢复。",
+      "advice": "永不删。要腾空间请迁移（migrate_with_junction.py），不要删除。"
+    },
+    {
+      "id": "R0024",
+      "category": "chat-client-data",
+      "level": "AMBER",
+      "high_risk": true,
+      "delay_seconds": 15,
+      "scope": "any",
+      "patterns": [
+        "*\\appdata\\roaming\\tencent\\xwechat",
+        "*\\appdata\\roaming\\tencent\\xwechat\\*",
+        "*\\appdata\\roaming\\tencent\\qq",
+        "*\\appdata\\roaming\\tencent\\qq\\*",
+        "*\\appdata\\roaming\\tencent\\wxwork\\*",
+        "*\\appdata\\roaming\\tencent\\wechat\\*",
+        "*\\xwechat_files",
+        "*\\xwechat_files\\*",
+        "*\\wechat files",
+        "*\\wechat files\\*",
+        "*\\tencent files",
+        "*\\tencent files\\*"
+      ],
+      "warning": "腾讯客户端数据目录：账号配置、消息索引、部分缓存，**可能含聊天记录**。整目录删除会丢历史消息（无云端可恢复）。",
+      "advice": "只清 cache/temp 子目录；消息库必须备份。走 wechat_module 四步流水线。"
+    }
+  ],
+  "user_excluded": {
+    "note": "项级排除记忆。用户说「这个别清」之后写进这里，下次自动跳过。键为规则 id，值为用户原话与日期。",
+    "items": []
+  }
+}
